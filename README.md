@@ -1,0 +1,1 @@
+# memenow-storage-service
