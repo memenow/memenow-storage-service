@@ -1,0 +1,22 @@
+# Clippy configuration for enhanced linting
+
+# Cognitive complexity threshold
+cognitive-complexity-threshold = 30
+
+# Disallowed names (variable names to avoid)
+disallowed-names = ["foo", "bar", "baz", "quux"]
+
+# Maximum number of single char bindings
+single-char-binding-names-threshold = 4
+
+# Maximum allowed type complexity
+type-complexity-threshold = 250
+
+# Maximum lines for a function
+too-many-lines-threshold = 100
+
+# Maximum arguments for a function
+too-many-arguments-threshold = 7
+
+# Enforce documentation
+missing-docs-in-crate-items = false

@@ -2,19 +2,57 @@
 name = "memenow-storage-service"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.75.0"
+authors = ["MemeNow Team"]
+description = "A high-performance microservice for handling file uploads to Amazon S3 and IPFS"
+license = "Apache-2.0"
+repository = "https://github.com/memenow/memenow-storage-service"
+keywords = ["s3", "ipfs", "storage", "microservice", "upload"]
+categories = ["web-programming", "web-programming::http-server"]
 
 [dependencies]
-tokio = { version = "1", features = ["full"] }
-futures = "0.3.30"
+# Async runtime
+tokio = { version = "1.42", features = ["full"] }
+futures = "0.3.31"
+futures-util = "0.3.31"
+
+# Web framework
 warp = "0.3.7"
-aws-sdk-s3 = "1.36.0"
-aws-config = "1.5.1"
+
+# AWS SDK
+aws-sdk-s3 = "1.67.0"
+aws-config = "1.5.10"
+
+# IPFS client
 ipfs-api = "0.17.0"
+
+# Utilities
 dotenv = "0.15.0"
-tokio-util = "0.7.11"
-uuid = { version = "1.8.0", features = ["v4"] }
-log = "0.4.21"
-serde_json = "1.0.117"
-futures-util = "0.3.30"
-bytes = "1.6.0"
-anyhow = "1.0.86"
+tokio-util = { version = "0.7.13", features = ["io"] }
+uuid = { version = "1.11.0", features = ["v4", "serde"] }
+bytes = "1.9.0"
+
+# Error handling
+anyhow = "1.0.94"
+thiserror = "2.0.9"
+
+# Serialization
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.135"
+
+# Logging
+log = "0.4.22"
+env_logger = "0.11.6"
+
+[dev-dependencies]
+tokio-test = "0.4.4"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.dev]
+opt-level = 0
+debug = true
