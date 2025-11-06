@@ -1,0 +1,16 @@
+# Cargo configuration for the project
+
+[build]
+# Enable all rustc lints by default
+rustflags = ["-D", "warnings"]
+
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+[alias]
+# Custom cargo commands
+check-all = "check --all-targets --all-features"
+test-all = "test --all-targets --all-features"
+clippy-all = "clippy --all-targets --all-features -- -D warnings -D clippy::all -D clippy::pedantic -D clippy::nursery -A clippy::missing_errors_doc -A clippy::module_name_repetitions"
+fmt-check = "fmt -- --check"

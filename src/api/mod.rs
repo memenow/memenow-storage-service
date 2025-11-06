@@ -1,20 +1,10 @@
-/// The `api` module contains the routes for the API.
+//! API Layer Module
+//!
+//! This module contains all the HTTP API endpoints for the MemeNow Storage Service.
+//! It organizes the routes and provides a unified interface for handling incoming requests.
+//!
+//! # Submodules
+//!
+//! - `upload`: Contains the file upload endpoint
+
 pub mod upload;
-
-use warp::Filter;
-
-/// The `api_routes` function returns a warp filter that represents all the routes for the API.
-/// This function is used to combine all the different route handlers into a single filter that can be served by warp.
-///
-/// # Returns
-///
-/// This function returns an implementation of `Filter` that extracts a type implementing `warp::Reply`.
-/// This means that the filter can be used to handle incoming requests and produce responses.
-///
-/// # Errors
-///
-/// This function will return a `warp::Rejection` if any of the route handlers fail to process a request.
-pub fn api_routes() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    // The `upload_routes` function from the `upload` module is called to get the routes for file uploading.
-    upload::upload_routes()
-}

@@ -1,0 +1,101 @@
+# Rustfmt configuration for consistent code formatting
+
+# Edition to use for parsing and formatting
+edition = "2021"
+
+# Maximum line width
+max_width = 100
+
+# Number of spaces per tab
+tab_spaces = 4
+
+# Use hard tabs instead of spaces
+hard_tabs = false
+
+# Newline style (Unix-style)
+newline_style = "Unix"
+
+# Brace style
+brace_style = "SameLineWhere"
+
+# Control flow brace style
+control_brace_style = "AlwaysSameLine"
+
+# Indent style
+indent_style = "Block"
+
+# Reorder imports alphabetically
+reorder_imports = true
+
+# Reorder modules
+reorder_modules = true
+
+# Remove nested parentheses
+remove_nested_parens = true
+
+# Merge consecutive derives
+merge_derives = true
+
+# Use field initialization shorthand if possible
+use_field_init_shorthand = true
+
+# Use try shorthand (?)
+use_try_shorthand = true
+
+# Format strings
+format_strings = true
+
+# Format code in doc comments
+format_code_in_doc_comments = true
+
+# Normalize doc attributes
+normalize_doc_attributes = true
+
+# Wrap comments at max_width
+wrap_comments = true
+
+# Format macro bodies
+format_macro_bodies = true
+
+# Format macro matchers
+format_macro_matchers = true
+
+# Error on line overflow
+error_on_line_overflow = false
+
+# Error on unformatted code
+error_on_unformatted = false
+
+# Blank lines at start of blocks
+blank_lines_upper_bound = 1
+blank_lines_lower_bound = 0
+
+# Combine control expressions
+combine_control_expr = true
+
+# Struct literal style
+struct_lit_single_line = true
+
+# Function call style
+fn_call_width = 60
+
+# Chain style
+chain_width = 60
+
+# Single line if/else
+single_line_if_else_max_width = 50
+
+# Imports granularity
+imports_granularity = "Crate"
+
+# Group imports by kind
+group_imports = "StdExternalCrate"
+
+# Trailing comma
+trailing_comma = "Vertical"
+
+# Match arm trailing comma
+match_arm_trailing_comma = true
+
+# Match block trailing comma
+match_block_trailing_comma = false
