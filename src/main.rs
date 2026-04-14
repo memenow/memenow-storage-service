@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("S3 Region: {}", config.s3.region);
     info!("Max file size: {} bytes", config.upload.max_file_size);
 
-    let s3 = Arc::new(S3Uploader);
+    let s3 = Arc::new(S3Uploader::new());
     let ipfs = Arc::new(IpfsUploader);
 
     let routes = upload_routes(s3, ipfs, config.clone());

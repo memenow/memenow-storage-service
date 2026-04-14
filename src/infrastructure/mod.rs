@@ -25,7 +25,7 @@
 //! use memenow_storage_service::domain::ports::{ObjectStorage, ContentAddressedStorage};
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! let s3_url = S3Uploader.upload("/tmp/file.jpg", "my-bucket", "uploads/file.jpg").await?;
+//! let s3_url = S3Uploader::new().upload("/tmp/file.jpg", "my-bucket", "uploads/file.jpg").await?;
 //! let ipfs_hash = IpfsUploader.upload("/tmp/file.jpg").await?;
 //! # Ok(())
 //! # }

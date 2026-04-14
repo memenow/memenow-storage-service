@@ -10,10 +10,44 @@ use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::Client;
 use log::{debug, info};
 use std::path::Path;
+use tokio::sync::OnceCell;
 
 /// Concrete S3 adapter implementing [`ObjectStorage`].
+///
+/// Lazily initializes and caches the AWS S3 client on first use.
 #[derive(Clone)]
-pub struct S3Uploader;
+pub struct S3Uploader {
+    client: OnceCell<Client>,
+}
+
+impl S3Uploader {
+    /// Creates a new `S3Uploader` with deferred client initialization.
+    pub fn new() -> Self {
+        Self {
+            client: OnceCell::new(),
+        }
+    }
+
+    async fn get_client(&self) -> &Client {
+        self.client
+            .get_or_init(|| async {
+                let region_provider = RegionProviderChain::default_provider().or_else("us-east-1");
+                let config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+                    .region(region_provider)
+                    .load()
+                    .await;
+                debug!("AWS configuration loaded, region: {:?}", config.region());
+                Client::new(&config)
+            })
+            .await
+    }
+}
+
+impl Default for S3Uploader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl ObjectStorage for S3Uploader {
     /// Uploads a file to Amazon S3.
@@ -33,15 +67,7 @@ impl ObjectStorage for S3Uploader {
             filepath, bucket, key
         );
 
-        let region_provider = RegionProviderChain::default_provider().or_else("us-east-1");
-        let config = aws_config::defaults(aws_config::BehaviorVersion::latest())
-            .region(region_provider)
-            .load()
-            .await;
-
-        debug!("AWS configuration loaded, region: {:?}", config.region());
-
-        let client = Client::new(&config);
+        let client = self.get_client().await;
 
         let file_path = Path::new(filepath);
         let body = ByteStream::from_path(file_path)

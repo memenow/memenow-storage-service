@@ -75,11 +75,9 @@ where
     let s3_future = s3.upload(&filepath_str, &config.s3.bucket, &file_key);
     let ipfs_future = ipfs.upload(&filepath_str);
 
-    let (s3_url, ipfs_hash) = try_join!(s3_future, ipfs_future).map_err(|e| {
-        error!("Failed to upload file: {}", e);
-        warp::reject::custom(StorageError::UploadError(e.to_string()))
-    })?;
+    let upload_result = try_join!(s3_future, ipfs_future);
 
+    // Clean up temp file regardless of upload outcome
     if let Err(e) = tokio::fs::remove_file(&filepath).await {
         warn!(
             "Failed to remove temporary file {}: {}",
@@ -89,6 +87,11 @@ where
     } else {
         debug!("Temporary file removed: {}", filepath.display());
     }
+
+    let (s3_url, ipfs_hash) = upload_result.map_err(|e| {
+        error!("Failed to upload file: {}", e);
+        warp::reject::custom(StorageError::UploadError(e.to_string()))
+    })?;
 
     info!(
         "File '{}' uploaded successfully - S3: {}, IPFS: {}",
