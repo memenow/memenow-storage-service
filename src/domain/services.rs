@@ -4,22 +4,20 @@
 //! coordinating between the API layer and infrastructure services.
 
 use crate::config::Config;
+use crate::domain::ports::{ContentAddressedStorage, ObjectStorage};
 use crate::error::StorageError;
-use crate::infrastructure::{ipfs, s3};
 use bytes::Buf;
 use futures_util::stream::TryStreamExt;
 use log::{debug, error, info, warn};
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::try_join;
 use uuid::Uuid;
-use warp::multipart::{FormData, Part};
+use warp::multipart::FormData;
 
 /// Response structure for successful file uploads
-///
-/// This structure is returned when a file has been successfully uploaded
-/// to both S3 and IPFS.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct UploadResponse {
     /// The URL where the file can be accessed on S3
@@ -34,52 +32,33 @@ pub struct UploadResponse {
 
 /// Handle file upload request
 ///
-/// This is the main entry point for processing file uploads. It performs the following steps:
-/// 1. Extracts the file from the multipart form data
-/// 2. Saves the file to a temporary location
-/// 3. Concurrently uploads the file to both S3 and IPFS
-/// 4. Returns the upload results
+/// Extracts the file from multipart form data, saves it to a temporary location,
+/// then concurrently uploads to both object storage and content-addressed storage.
 ///
 /// # Arguments
 ///
 /// * `form` - Multipart form data containing the file to upload
-/// * `config` - Application configuration containing upload settings
+/// * `s3` - Object storage backend
+/// * `ipfs` - Content-addressed storage backend
+/// * `config` - Application configuration
 ///
 /// # Returns
 ///
-/// Returns a JSON response containing the S3 URL and IPFS hash on success,
-/// or a warp rejection on failure.
-///
-/// # Errors
-///
-/// This function will return an error if:
-/// - No file is found in the form data
-/// - The file cannot be saved to temporary storage
-/// - The upload to S3 or IPFS fails
-///
-/// # Examples
-///
-/// ```no_run
-/// use warp::multipart::FormData;
-/// use memenow_storage_service::domain::services::handle_upload;
-/// use memenow_storage_service::config::Config;
-///
-/// # async fn example(form: FormData) -> Result<(), Box<dyn std::error::Error>> {
-/// let config = Config::default();
-/// let response = handle_upload(form, config).await?;
-/// # Ok(())
-/// # }
-/// ```
-pub async fn handle_upload(
+/// JSON response with S3 URL, IPFS hash, filename, and size on success.
+pub async fn handle_upload<S, C>(
     form: FormData,
+    s3: Arc<S>,
+    ipfs: Arc<C>,
     config: Config,
-) -> Result<impl warp::Reply, warp::Rejection> {
+) -> Result<impl warp::Reply, warp::Rejection>
+where
+    S: ObjectStorage,
+    C: ContentAddressedStorage,
+{
     debug!("Processing upload request");
 
-    // Extract file from multipart form data
-    let (filepath, filename, file_size) = extract_and_save_file(form, &config)
-        .await
-        .map_err(|e| {
+    let (filepath, filename, file_size) =
+        extract_and_save_file(form, &config).await.map_err(|e| {
             error!("Failed to extract file from form data: {}", e);
             warp::reject::custom(e)
         })?;
@@ -90,23 +69,15 @@ pub async fn handle_upload(
         file_size
     );
 
-    // Generate unique key for S3
     let file_key = generate_file_key(&filename, &config.s3.key_prefix);
 
-    // Upload to S3 and IPFS concurrently
-    let s3_future = s3::upload_to_s3(
-        filepath.to_str().unwrap(),
-        &config.s3.bucket,
-        &file_key,
-    );
-    let ipfs_future = ipfs::upload_to_ipfs(filepath.to_str().unwrap());
+    let filepath_str = filepath.to_str().unwrap().to_string();
+    let s3_future = s3.upload(&filepath_str, &config.s3.bucket, &file_key);
+    let ipfs_future = ipfs.upload(&filepath_str);
 
-    let (s3_url, ipfs_hash) = try_join!(s3_future, ipfs_future).map_err(|e| {
-        error!("Failed to upload file: {}", e);
-        warp::reject::custom(StorageError::UploadError(e.to_string()))
-    })?;
+    let upload_result = try_join!(s3_future, ipfs_future);
 
-    // Clean up temporary file
+    // Clean up temp file regardless of upload outcome
     if let Err(e) = tokio::fs::remove_file(&filepath).await {
         warn!(
             "Failed to remove temporary file {}: {}",
@@ -116,6 +87,11 @@ pub async fn handle_upload(
     } else {
         debug!("Temporary file removed: {}", filepath.display());
     }
+
+    let (s3_url, ipfs_hash) = upload_result.map_err(|e| {
+        error!("Failed to upload file: {}", e);
+        warp::reject::custom(StorageError::UploadError(e.to_string()))
+    })?;
 
     info!(
         "File '{}' uploaded successfully - S3: {}, IPFS: {}",
@@ -134,32 +110,19 @@ pub async fn handle_upload(
 
 /// Extract file from form data and save to temporary location
 ///
-/// # Arguments
-///
-/// * `form` - Multipart form data
-/// * `config` - Application configuration
-///
-/// # Returns
-///
-/// Returns a tuple containing (filepath, filename, file_size)
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - No file is found in the form data
-/// - File creation or writing fails
+/// Processes parts one at a time (via `try_next`) to avoid multer lock issues
+/// that occur when holding multiple `Part` references simultaneously.
 async fn extract_and_save_file(
     form: FormData,
     config: &Config,
 ) -> Result<(PathBuf, String, u64), StorageError> {
-    let parts: Vec<Part> = form
-        .try_collect()
+    let mut form = form;
+
+    while let Some(mut part) = form
+        .try_next()
         .await
-        .map_err(|e| StorageError::MultipartError(e.to_string()))?;
-
-    let mut file_data: Option<(PathBuf, String, u64)> = None;
-
-    for mut part in parts {
+        .map_err(|e| StorageError::MultipartError(e.to_string()))?
+    {
         if part.name() == "file" {
             let filename = part
                 .filename()
@@ -168,7 +131,6 @@ async fn extract_and_save_file(
 
             debug!("Processing file: {}", filename);
 
-            // Generate unique temporary filepath
             let temp_filename = format!("{}_{}", Uuid::new_v4(), filename);
             let filepath = PathBuf::from(&config.upload.temp_dir).join(temp_filename);
 
@@ -178,7 +140,6 @@ async fn extract_and_save_file(
 
             let mut total_size = 0u64;
 
-            // Read and write file chunks
             while let Some(chunk) = part.data().await {
                 let data = chunk.map_err(|e| {
                     StorageError::MultipartError(format!("Failed to read chunk: {}", e))
@@ -187,9 +148,7 @@ async fn extract_and_save_file(
                 let bytes = data.chunk();
                 total_size += bytes.len() as u64;
 
-                // Check file size limit
                 if total_size > config.upload.max_file_size as u64 {
-                    // Clean up the partially written file
                     let _ = tokio::fs::remove_file(&filepath).await;
                     return Err(StorageError::UploadError(format!(
                         "File size exceeds maximum allowed size of {} bytes",
@@ -197,34 +156,21 @@ async fn extract_and_save_file(
                     )));
                 }
 
-                file.write_all(bytes)
-                    .await
-                    .map_err(StorageError::IoError)?;
+                file.write_all(bytes).await.map_err(StorageError::IoError)?;
             }
 
-            // Ensure all data is written to disk
             file.flush().await.map_err(StorageError::IoError)?;
 
             debug!("File written successfully: {} bytes", total_size);
 
-            file_data = Some((filepath, filename, total_size));
-            break;
+            return Ok((filepath, filename, total_size));
         }
     }
 
-    file_data.ok_or(StorageError::NoFileError)
+    Err(StorageError::NoFileError)
 }
 
 /// Generate a unique S3 key for the uploaded file
-///
-/// # Arguments
-///
-/// * `filename` - Original filename
-/// * `prefix` - S3 key prefix from configuration
-///
-/// # Returns
-///
-/// Returns a unique S3 key combining the prefix, UUID, and filename
 fn generate_file_key(filename: &str, prefix: &str) -> String {
     let uuid = Uuid::new_v4();
     let sanitized_filename = sanitize_filename(filename);
@@ -232,14 +178,6 @@ fn generate_file_key(filename: &str, prefix: &str) -> String {
 }
 
 /// Sanitize filename by removing or replacing unsafe characters
-///
-/// # Arguments
-///
-/// * `filename` - Original filename to sanitize
-///
-/// # Returns
-///
-/// Returns a sanitized filename safe for use in URLs and file systems
 fn sanitize_filename(filename: &str) -> String {
     filename
         .chars()
@@ -261,7 +199,7 @@ mod tests {
         assert_eq!(sanitize_filename("test@#$.jpg"), "test___.jpg");
         assert_eq!(
             sanitize_filename("../../../etc/passwd"),
-            ".._.._..._etc_passwd"
+            ".._.._.._etc_passwd"
         );
     }
 

@@ -20,4 +20,5 @@
 //! This separation allows the business logic to remain clean and testable,
 //! independent of external service implementations.
 
+pub mod ports;
 pub mod services;

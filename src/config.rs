@@ -106,9 +106,7 @@ impl Config {
             port: env::var("SERVER_PORT")
                 .unwrap_or_else(|_| "8080".to_string())
                 .parse()
-                .map_err(|e| {
-                    StorageError::ConfigError(format!("Invalid SERVER_PORT: {}", e))
-                })?,
+                .map_err(|e| StorageError::ConfigError(format!("Invalid SERVER_PORT: {}", e)))?,
         };
 
         let upload = UploadConfig {
@@ -121,11 +119,7 @@ impl Config {
             temp_dir: env::var("TEMP_DIR").unwrap_or_else(|_| "/tmp".to_string()),
         };
 
-        Ok(Self {
-            s3,
-            server,
-            upload,
-        })
+        Ok(Self { s3, server, upload })
     }
 
     /// Validate the configuration

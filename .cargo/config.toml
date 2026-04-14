@@ -4,10 +4,6 @@
 # Enable all rustc lints by default
 rustflags = ["-D", "warnings"]
 
-[target.x86_64-unknown-linux-gnu]
-linker = "clang"
-rustflags = ["-C", "link-arg=-fuse-ld=lld"]
-
 [alias]
 # Custom cargo commands
 check-all = "check --all-targets --all-features"
