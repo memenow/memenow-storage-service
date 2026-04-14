@@ -4,7 +4,7 @@
 
 use crate::domain::ports::ContentAddressedStorage;
 use anyhow::{Context, Result};
-use ipfs_api::{IpfsApi, IpfsClient, TryFromUri};
+use ipfs_api::{IpfsApi, IpfsClient};
 use log::{debug, info};
 use std::path::Path;
 use tokio::task;
@@ -60,35 +60,5 @@ impl ContentAddressedStorage for IpfsUploader {
         info!("Access via gateway: https://ipfs.io/ipfs/{}", hash);
 
         Ok(hash)
-    }
-}
-
-/// Create a custom IPFS client with a specific endpoint URL
-///
-/// # Arguments
-///
-/// * `url` - The full URL of the IPFS daemon API endpoint
-///
-/// # Panics
-///
-/// Panics if the URL is invalid
-pub fn create_ipfs_client(url: &str) -> IpfsClient {
-    IpfsClient::from_str(url).expect("Failed to create IPFS client with custom endpoint")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_create_ipfs_client_localhost() {
-        let client = create_ipfs_client("http://127.0.0.1:5001");
-        drop(client);
-    }
-
-    #[test]
-    fn test_create_ipfs_client_custom() {
-        let client = create_ipfs_client("http://192.168.1.100:5001");
-        drop(client);
     }
 }

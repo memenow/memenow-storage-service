@@ -14,30 +14,34 @@ use tokio::sync::OnceCell;
 
 /// Concrete S3 adapter implementing [`ObjectStorage`].
 ///
-/// Lazily initializes and caches the AWS S3 client on first use.
+/// Lazily initializes and caches the AWS S3 client and resolved region on first use.
 #[derive(Clone)]
 pub struct S3Uploader {
-    client: OnceCell<Client>,
+    inner: OnceCell<(Client, String)>,
 }
 
 impl S3Uploader {
     /// Creates a new `S3Uploader` with deferred client initialization.
     pub fn new() -> Self {
         Self {
-            client: OnceCell::new(),
+            inner: OnceCell::new(),
         }
     }
 
-    async fn get_client(&self) -> &Client {
-        self.client
+    async fn get_inner(&self) -> &(Client, String) {
+        self.inner
             .get_or_init(|| async {
                 let region_provider = RegionProviderChain::default_provider().or_else("us-east-1");
                 let config = aws_config::defaults(aws_config::BehaviorVersion::latest())
                     .region(region_provider)
                     .load()
                     .await;
-                debug!("AWS configuration loaded, region: {:?}", config.region());
-                Client::new(&config)
+                let region = config
+                    .region()
+                    .map(|r| r.to_string())
+                    .unwrap_or_else(|| "us-east-1".to_string());
+                debug!("AWS configuration loaded, region: {}", region);
+                (Client::new(&config), region)
             })
             .await
     }
@@ -67,7 +71,7 @@ impl ObjectStorage for S3Uploader {
             filepath, bucket, key
         );
 
-        let client = self.get_client().await;
+        let (client, region) = self.get_inner().await;
 
         let file_path = Path::new(filepath);
         let body = ByteStream::from_path(file_path)
@@ -88,7 +92,7 @@ impl ObjectStorage for S3Uploader {
                 bucket, key
             ))?;
 
-        let url = format!("https://{}.s3.amazonaws.com/{}", bucket, key);
+        let url = get_s3_url(bucket, key, region);
 
         info!("File uploaded successfully to S3: {}", url);
 
