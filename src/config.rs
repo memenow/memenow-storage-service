@@ -443,6 +443,13 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_bad_dotted_host_with_trailing_dot() {
+        let mut config = Config::default();
+        config.server.host = "1.2.3.4.".to_string();
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
     fn test_validate_valid_config() {
         let config = Config::default();
         assert!(config.validate().is_ok());
