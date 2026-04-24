@@ -5,7 +5,7 @@
 use crate::domain::ports::ContentAddressedStorage;
 use anyhow::{Context, Result};
 use ipfs_api::{IpfsApi, IpfsClient};
-use log::{debug, info};
+use log::{debug, info, warn};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
@@ -34,7 +34,7 @@ impl ContentAddressedStorage for IpfsUploader {
     async fn upload(&self, filepath: &str) -> Result<String> {
         debug!("Initiating IPFS upload: file={}", filepath);
 
-        let permit = self
+        let _permit = self
             .concurrency
             .clone()
             .acquire_owned()
@@ -44,8 +44,7 @@ impl ContentAddressedStorage for IpfsUploader {
         let filepath_owned = filepath.to_string();
         let timeout_duration = self.timeout;
 
-        let handle = task::spawn_blocking(move || {
-            let _permit = permit;
+        let mut handle = task::spawn_blocking(move || {
             let client = IpfsClient::default();
 
             debug!("IPFS client created, adding file to IPFS...");
@@ -66,15 +65,28 @@ impl ContentAddressedStorage for IpfsUploader {
             Ok(hash) as Result<String>
         });
 
-        let hash = timeout(timeout_duration, handle)
-            .await
-            .map_err(|_| {
-                anyhow::anyhow!(
+        let join_result = timeout(timeout_duration, &mut handle).await;
+
+        let hash = match join_result {
+            Ok(result) => result.context("IPFS upload task panicked or was cancelled")?,
+            Err(_) => {
+                warn!(
+                    "IPFS upload timeout after {} ms for file={}",
+                    timeout_duration.as_millis(),
+                    filepath
+                );
+                // spawn_blocking tasks are not guaranteed to be cancelled immediately; aborting
+                // ensures the runtime can stop waiting on this request path promptly.
+                // The permit is released when this function returns.
+                // The task itself may continue briefly in the background depending on scheduler behavior.
+                // This trade-off keeps service capacity available under repeated slow uploads.
+                let _ = handle.abort();
+                return Err(anyhow::anyhow!(
                     "IPFS upload timed out after {} ms",
                     timeout_duration.as_millis()
-                )
-            })?
-            .context("IPFS upload task panicked or was cancelled")??;
+                ));
+            }
+        }?;
 
         info!("File uploaded successfully to IPFS: {}", hash);
         info!("Access via gateway: https://ipfs.io/ipfs/{}", hash);

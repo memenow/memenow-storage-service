@@ -297,7 +297,7 @@ fn is_valid_host(host: &str) -> bool {
     match (host, 0).to_socket_addrs() {
         Ok(mut addrs) => addrs.next().is_some(),
         Err(_) => {
-            if is_numeric_ipv4_host(host) {
+            if is_numeric_dotted_host(host) {
                 return false;
             }
 
@@ -306,9 +306,9 @@ fn is_valid_host(host: &str) -> bool {
     }
 }
 
-fn is_numeric_ipv4_host(host: &str) -> bool {
+fn is_numeric_dotted_host(host: &str) -> bool {
     let parts: Vec<&str> = host.split('.').collect();
-    if parts.len() != 4 {
+    if parts.len() <= 1 {
         return false;
     }
 
@@ -432,6 +432,13 @@ mod tests {
     fn test_validate_bad_numeric_host() {
         let mut config = Config::default();
         config.server.host = "256.1.1.1".to_string();
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_validate_bad_dotted_numeric_host() {
+        let mut config = Config::default();
+        config.server.host = "1.2.3.4.5".to_string();
         assert!(config.validate().is_err());
     }
 
