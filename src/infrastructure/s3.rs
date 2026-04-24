@@ -11,6 +11,7 @@ use aws_sdk_s3::Client;
 use log::{debug, info};
 use std::path::Path;
 use tokio::sync::OnceCell;
+use tokio::time::{timeout, Duration};
 
 /// Concrete S3 adapter implementing [`ObjectStorage`].
 ///
@@ -18,13 +19,15 @@ use tokio::sync::OnceCell;
 #[derive(Clone)]
 pub struct S3Uploader {
     inner: OnceCell<(Client, String)>,
+    upload_timeout: Duration,
 }
 
 impl S3Uploader {
     /// Creates a new `S3Uploader` with deferred client initialization.
-    pub fn new() -> Self {
+    pub fn new(upload_timeout_ms: u64) -> Self {
         Self {
             inner: OnceCell::new(),
+            upload_timeout: Duration::from_millis(upload_timeout_ms),
         }
     }
 
@@ -49,7 +52,7 @@ impl S3Uploader {
 
 impl Default for S3Uploader {
     fn default() -> Self {
-        Self::new()
+        Self::new(30_000)
     }
 }
 
@@ -80,13 +83,16 @@ impl ObjectStorage for S3Uploader {
 
         debug!("File stream created, uploading to S3...");
 
-        client
+        let request = client
             .put_object()
             .bucket(bucket)
             .key(key)
             .body(body)
-            .send()
+            .send();
+
+        let _response = timeout(self.upload_timeout, request)
             .await
+            .map_err(|_| anyhow::anyhow!("S3 upload timed out after {} ms", self.upload_timeout.as_millis()))?
             .context(format!(
                 "Failed to upload file to S3: bucket={}, key={}",
                 bucket, key

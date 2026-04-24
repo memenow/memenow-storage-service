@@ -2,11 +2,11 @@
 
 use log::{error, info};
 use memenow_storage_service::api::upload::upload_routes;
+use memenow_storage_service::error::StorageError;
 use memenow_storage_service::config::Config;
 use memenow_storage_service::infrastructure::ipfs::IpfsUploader;
 use memenow_storage_service::infrastructure::s3::S3Uploader;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::str::FromStr;
+use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::sync::Arc;
 
 #[tokio::main]
@@ -29,14 +29,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("S3 Bucket: {}", config.s3.bucket);
     info!("S3 Region: {}", config.s3.region);
     info!("Max file size: {} bytes", config.upload.max_file_size);
+    info!("S3 upload timeout: {} ms", config.s3.upload_timeout_ms);
+    info!("IPFS upload timeout: {} ms", config.upload.ipfs_upload_timeout_ms);
+    info!("IPFS max concurrency: {}", config.upload.ipfs_max_concurrency);
 
-    let s3 = Arc::new(S3Uploader::new());
-    let ipfs = Arc::new(IpfsUploader);
+    let s3 = Arc::new(S3Uploader::new(config.s3.upload_timeout_ms));
+    let ipfs = Arc::new(IpfsUploader::new(
+        config.upload.ipfs_upload_timeout_ms,
+        config.upload.ipfs_max_concurrency,
+    ));
 
     let routes = upload_routes(s3, ipfs, config.clone());
 
-    let host =
-        IpAddr::from_str(&config.server.host).unwrap_or(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
+    let host = resolve_server_host(&config.server.host).map_err(|error| {
+        error!("Invalid SERVER_HOST '{}': {}", config.server.host, error);
+        StorageError::ConfigError(format!(
+            "Invalid SERVER_HOST '{}': {}",
+            config.server.host, error
+        ))
+    })?;
     let addr = SocketAddr::new(host, config.server.port);
 
     info!("Server starting on http://{}", addr);
@@ -46,4 +57,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     warp::serve(routes).run(addr).await;
 
     Ok(())
+}
+
+fn resolve_server_host(host: &str) -> Result<IpAddr, String> {
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        return Ok(ip);
+    }
+
+    let mut addrs = (host, 0)
+        .to_socket_addrs()
+        .map_err(|_| format!("Cannot resolve host '{}'", host))?;
+
+    addrs
+        .next()
+        .map(|addr| addr.ip())
+        .ok_or_else(|| format!("Cannot resolve host '{}'", host))
 }

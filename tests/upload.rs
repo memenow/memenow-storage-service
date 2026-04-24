@@ -2,6 +2,8 @@ use memenow_storage_service::api::upload::upload_routes;
 use memenow_storage_service::config::Config;
 use memenow_storage_service::domain::ports::{ContentAddressedStorage, ObjectStorage};
 use std::sync::Arc;
+use std::{fs, path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
+use warp::http::StatusCode;
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -74,6 +76,22 @@ fn multipart_body(field_name: &str, filename: &str, content: &[u8]) -> (String, 
     (content_type, body)
 }
 
+fn unique_temp_dir(prefix: &str) -> PathBuf {
+    let mut path = std::env::temp_dir();
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    path.push(format!("memenow-upload-test-{}-{}", prefix, stamp));
+    fs::create_dir_all(&path).unwrap();
+    path
+}
+
+fn assert_error_response(body: &[u8], expected_code: &str) {
+    let json: serde_json::Value = serde_json::from_slice(body).unwrap();
+    assert_eq!(json["error"]["code"], expected_code);
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -140,7 +158,15 @@ async fn s3_failure_returns_error() {
         .reply(&filter)
         .await;
 
-    assert_ne!(resp.status(), 200);
+    assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
+    assert_error_response(resp.body(), "UPLOAD_PARTIAL_FAILURE");
+    let json: serde_json::Value = serde_json::from_slice(resp.body()).unwrap();
+    let partial_success = &json["error"]["details"]["partial_success"];
+    assert!(partial_success["s3_url"].is_string() || partial_success["ipfs_hash"].is_string());
+    assert_ne!(
+        partial_success["s3_url"].is_string(),
+        partial_success["ipfs_hash"].is_string()
+    );
 }
 
 #[tokio::test]
@@ -160,7 +186,15 @@ async fn ipfs_failure_returns_error() {
         .reply(&filter)
         .await;
 
-    assert_ne!(resp.status(), 200);
+    assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
+    assert_error_response(resp.body(), "UPLOAD_PARTIAL_FAILURE");
+    let json: serde_json::Value = serde_json::from_slice(resp.body()).unwrap();
+    let partial_success = &json["error"]["details"]["partial_success"];
+    assert!(partial_success["s3_url"].is_string() || partial_success["ipfs_hash"].is_string());
+    assert_ne!(
+        partial_success["s3_url"].is_string(),
+        partial_success["ipfs_hash"].is_string()
+    );
 }
 
 #[tokio::test]
@@ -181,7 +215,8 @@ async fn both_backends_fail_returns_error() {
         .reply(&filter)
         .await;
 
-    assert_ne!(resp.status(), 200);
+    assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
+    assert_error_response(resp.body(), "STORAGE_BACKEND_ERROR");
 }
 
 #[tokio::test]
@@ -197,13 +232,16 @@ async fn missing_file_field_returns_error() {
         .reply(&filter)
         .await;
 
-    assert_ne!(resp.status(), 200);
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    assert_error_response(resp.body(), "INVALID_REQUEST");
 }
 
 #[tokio::test]
 async fn oversize_body_is_rejected() {
     let mut config = Config::default();
+    let temp_dir = unique_temp_dir("oversize");
     config.upload.max_file_size = 100; // 100 bytes limit
+    config.upload.temp_dir = temp_dir.to_string_lossy().to_string();
     let filter = upload_routes(mock_s3_ok(), mock_ipfs_ok(), config);
     let big_content = vec![0u8; 200];
     let (ct, body) = multipart_body("file", "big.bin", &big_content);
@@ -216,5 +254,28 @@ async fn oversize_body_is_rejected() {
         .reply(&filter)
         .await;
 
-    assert_ne!(resp.status(), 200);
+    assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    assert_error_response(resp.body(), "PAYLOAD_TOO_LARGE");
+
+    let entries = fs::read_dir(&temp_dir).unwrap().count();
+    assert_eq!(entries, 0, "temporary files should not be left behind");
+    fs::remove_dir_all(&temp_dir).unwrap();
+}
+
+#[tokio::test]
+async fn illegal_filename_is_sanitized() {
+    let filter = upload_routes(mock_s3_ok(), mock_ipfs_ok(), Config::default());
+    let (ct, body) = multipart_body("file", "../../../etc/passwd", b"data");
+
+    let resp = warp::test::request()
+        .method("POST")
+        .path("/upload")
+        .header("content-type", &ct)
+        .body(body)
+        .reply(&filter)
+        .await;
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let json: serde_json::Value = serde_json::from_slice(resp.body()).unwrap();
+    assert_eq!(json["filename"], ".._.._.._etc_passwd");
 }
