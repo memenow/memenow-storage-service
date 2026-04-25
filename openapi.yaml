@@ -1,0 +1,131 @@
+openapi: 3.0.3
+info:
+  title: MemeNow Storage Service API
+  version: 0.1.0
+  description: Upload files to both Amazon S3 and IPFS.
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+paths:
+  /upload:
+    post:
+      summary: Upload a file to S3 and IPFS
+      operationId: uploadFile
+      tags:
+        - uploads
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: File content. The field name must be `file`.
+            encoding:
+              file:
+                contentType: application/octet-stream
+      responses:
+        '200':
+          description: Upload completed on both backends
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+              examples:
+                success:
+                  value:
+                    s3_url: https://your-bucket.s3.amazonaws.com/uploads/file-key.bin
+                    ipfs_hash: QmExampleHash
+                    filename: example.bin
+                    size: 1024
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Payload exceeds MAX_FILE_SIZE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                payloadTooLarge:
+                  value:
+                    error:
+                      code: PAYLOAD_TOO_LARGE
+                      message: Payload too large. Max allowed bytes: 5242880
+                      request_id: 3f5e12a1
+                      details:
+                        max_bytes: 5242880
+                        actual_bytes: 6000000
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: One or both backends failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    UploadResponse:
+      type: object
+      properties:
+        s3_url:
+          type: string
+          format: uri
+        ipfs_hash:
+          type: string
+        filename:
+          type: string
+          description: Sanitized filename returned in response
+        size:
+          type: integer
+          format: int64
+      required:
+        - s3_url
+        - ipfs_hash
+        - filename
+        - size
+
+    ErrorPayload:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        request_id:
+          type: string
+          nullable: true
+        details:
+          type: object
+          additionalProperties: true
+          nullable: true
+      required:
+        - code
+        - message
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorPayload'
+      required:
+        - error

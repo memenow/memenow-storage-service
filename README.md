@@ -41,6 +41,16 @@ AWS_REGION=your-aws-region
 
 Ensure you have IPFS installed and running locally, or configure the IPFS API endpoint if using a remote node.
 
+The service also reads the following optional values:
+
+- `S3_UPLOAD_TIMEOUT_MS` (default: `30000`)
+- `IPFS_UPLOAD_TIMEOUT_MS` (default: `60000`)
+- `IPFS_MAX_CONCURRENCY` (default: `4`)
+- `MAX_FILE_SIZE` (default: `5242880`)
+- `TEMP_DIR` (default: `/tmp`)
+- `SERVER_HOST` (default: `0.0.0.0`)
+- `SERVER_PORT` (default: `8080`)
+
 ## Usage
 
 1. Start the service:
@@ -60,6 +70,7 @@ Upload a file to both S3 and IPFS.
 - Method: POST
 - Content-Type: multipart/form-data
 - Body: Form data with a "file" field containing the file to upload
+- The service expects one form part named `file`. If multiple parts exist, only the `file` part is used.
 
 **Response:**
 - Status: 200 OK
@@ -68,9 +79,46 @@ Upload a file to both S3 and IPFS.
   ```json
   {
     "s3_url": "https://your-bucket.s3.amazonaws.com/your-file-key",
-    "ipfs_hash": "QmHashOfYourFileOnIPFS"
+    "ipfs_hash": "QmHashOfYourFileOnIPFS",
+    "filename": "sanitized-name.jpg",
+    "size": 12345
   }
   ```
+
+## Error response
+
+All failures return:
+
+```json
+{
+  "error": {
+    "code": "STRING_CODE",
+    "message": "human-readable message",
+    "details": {},
+    "request_id": null
+  }
+}
+```
+
+`request_id` is optional and currently omitted for now because the filter-level recovery layer does not attach request metadata to the current rejection object.
+
+### Error matrix
+
+| HTTP status | code                  | Meaning                                     | Details                                 |
+|------------|-----------------------|---------------------------------------------|-----------------------------------------|
+| 400        | INVALID_REQUEST       | Missing `file` field, malformed multipart data, or invalid filename | none                                    |
+| 413        | PAYLOAD_TOO_LARGE     | Uploaded body exceeds `MAX_FILE_SIZE`         | `max_bytes`, `actual_bytes`             |
+| 502        | UPLOAD_PARTIAL_FAILURE | One backend failed, the other succeeded       | `failed_backend`, `partial_success`      |
+| 502        | STORAGE_BACKEND_ERROR  | Both backends failed                          | `backend`                               |
+| 500        | CLEANUP_ERROR         | Temp file cleanup failed after upload attempt   | `path`                                  |
+| 500        | CONFIG_ERROR          | Invalid configuration                         | none                                    |
+| 500        | IO_ERROR / AWS_ERROR / S3_ERROR / INTERNAL_ERROR | Internal runtime failures | none or backend-specific details |
+
+## OpenAPI
+
+The OpenAPI 3.0 specification is available at [openapi.yaml](/home/billduke/Documents/memenow/memenow-storage-service/openapi.yaml).
+
+## Environment variables
 
 ## Dependencies
 
