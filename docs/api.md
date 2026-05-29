@@ -49,15 +49,16 @@ Every failure returns the same JSON shape:
   "error": {
     "code": "STRING_CODE",
     "message": "human-readable message",
-    "details": { },
+    "details": null,
     "request_id": null
   }
 }
 ```
 
 - `code` and `message` are always present.
-- `details` is present only for the variants noted below (otherwise omitted).
-- `request_id` is currently always omitted from responses. A short request ID is
+- `details` is always present; it is `null` unless the error supplies structured
+  fields (the Details column below — a `—` there means `null`).
+- `request_id` is always present but currently always `null`. A short request ID is
   generated per request and written to the server logs (`request_id=...`), but the
   rejection-recovery layer does not yet attach it to the response body.
 

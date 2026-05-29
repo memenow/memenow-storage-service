@@ -129,13 +129,13 @@ All failures return:
   "error": {
     "code": "STRING_CODE",
     "message": "human-readable message",
-    "details": {},
+    "details": null,
     "request_id": null
   }
 }
 ```
 
-`request_id` is optional and currently omitted for now because the filter-level recovery layer does not attach request metadata to the current rejection object.
+Both `details` and `request_id` are always present in the body. `details` is `null` unless the error carries structured fields (see the matrix below). `request_id` is currently always `null`: a short id is generated per request and written to the logs (`request_id=...`), but the recovery layer does not yet attach it to the response body.
 
 ### Error matrix
 
@@ -166,11 +166,14 @@ Detailed documentation lives in the [`docs/`](docs/) directory:
 
 - warp: Web framework for Rust
 - tokio: Asynchronous runtime
-- aws-sdk-s3: AWS SDK for S3 operations
+- aws-sdk-s3 / aws-config: AWS SDK for S3 operations
 - ipfs-api: IPFS API client
-- anyhow: Error handling
+- anyhow / thiserror: Error handling
+- serde / serde_json: Serialization
+- uuid: Request IDs and unique object keys
+- bytes: Multipart buffer handling
 - dotenv: Environment variable management
-- log: Logging facade
+- log / env_logger: Logging facade and implementation
 
 ## License
 

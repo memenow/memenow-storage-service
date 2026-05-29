@@ -169,6 +169,8 @@ components:
       required:
         - code
         - message
+        - request_id
+        - details
 
     ErrorResponse:
       type: object

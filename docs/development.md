@@ -75,8 +75,9 @@ Tests rely on the port traits rather than real backends:
   both-fail, missing `file` part, oversized body (asserting the temp file is cleaned
   up), filename sanitization, wrong method (405), and unknown path (404).
 - Unit tests live alongside their modules: `config.rs` (validation, host and temp-dir
-  rules), `error.rs` (status/code mapping), `services.rs` (sanitization, key
-  generation, response serialization), `s3.rs` (URL formatting), and `utils/file.rs`.
+  rules), `error.rs` (status/code mapping), `api/upload.rs` (route method/path),
+  `services.rs` (sanitization, key generation, response serialization), `s3.rs`
+  (URL formatting), and `utils/file.rs`.
 
 This is the reason for the hexagonal split: business logic is verifiable without
 network access, AWS credentials, or a local IPFS daemon.
