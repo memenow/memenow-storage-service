@@ -59,6 +59,8 @@ paths:
                     error:
                       code: INVALID_REQUEST
                       message: No file found in upload request
+                      request_id: null
+                      details: null
         '405':
           description: Method not allowed (only POST is supported)
           content:
@@ -71,6 +73,8 @@ paths:
                     error:
                       code: METHOD_NOT_ALLOWED
                       message: Method not allowed
+                      request_id: null
+                      details: null
         '413':
           description: Payload exceeds MAX_FILE_SIZE
           content:
@@ -83,6 +87,7 @@ paths:
                     error:
                       code: PAYLOAD_TOO_LARGE
                       message: 'Payload too large. Max allowed bytes: 5242880'
+                      request_id: null
                       details:
                         max_bytes: 5242880
                         actual_bytes: 6000000
@@ -98,6 +103,8 @@ paths:
                     error:
                       code: INVALID_MEDIA_TYPE
                       message: Unsupported media type
+                      request_id: null
+                      details: null
         '500':
           description: Internal error (configuration, I/O, or temp-file cleanup failure)
           content:
@@ -117,6 +124,7 @@ paths:
                     error:
                       code: UPLOAD_PARTIAL_FAILURE
                       message: "Partial upload failure on 'ipfs': IPFS upload failed: connection refused"
+                      request_id: null
                       details:
                         failed_backend: ipfs
                         partial_success:
@@ -127,6 +135,7 @@ paths:
                     error:
                       code: STORAGE_BACKEND_ERROR
                       message: 'S3 upload failed: ...; IPFS upload failed: ...'
+                      request_id: null
                       details:
                         backend: s3_and_ipfs
 
