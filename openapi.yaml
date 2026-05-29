@@ -48,11 +48,29 @@ paths:
                     filename: example.bin
                     size: 1024
         '400':
-          description: Invalid request
+          description: Missing `file` part, malformed multipart, or invalid filename
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidRequest:
+                  value:
+                    error:
+                      code: INVALID_REQUEST
+                      message: No file found in upload request
+        '405':
+          description: Method not allowed (only POST is supported)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                methodNotAllowed:
+                  value:
+                    error:
+                      code: METHOD_NOT_ALLOWED
+                      message: Method not allowed
         '413':
           description: Payload exceeds MAX_FILE_SIZE
           content:
@@ -64,13 +82,24 @@ paths:
                   value:
                     error:
                       code: PAYLOAD_TOO_LARGE
-                      message: Payload too large. Max allowed bytes: 5242880
-                      request_id: 3f5e12a1
+                      message: 'Payload too large. Max allowed bytes: 5242880'
                       details:
                         max_bytes: 5242880
                         actual_bytes: 6000000
+        '415':
+          description: Body is not multipart/form-data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidMediaType:
+                  value:
+                    error:
+                      code: INVALID_MEDIA_TYPE
+                      message: Unsupported media type
         '500':
-          description: Internal error
+          description: Internal error (configuration, I/O, or temp-file cleanup failure)
           content:
             application/json:
               schema:
@@ -81,6 +110,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                partialFailure:
+                  summary: One backend failed, the other succeeded
+                  value:
+                    error:
+                      code: UPLOAD_PARTIAL_FAILURE
+                      message: "Partial upload failure on 'ipfs': IPFS upload failed: connection refused"
+                      details:
+                        failed_backend: ipfs
+                        partial_success:
+                          s3_url: https://your-bucket.s3.amazonaws.com/uploads/file-key.bin
+                bothFailed:
+                  summary: Both backends failed
+                  value:
+                    error:
+                      code: STORAGE_BACKEND_ERROR
+                      message: 'S3 upload failed: ...; IPFS upload failed: ...'
+                      details:
+                        backend: s3_and_ipfs
 
 components:
   schemas:

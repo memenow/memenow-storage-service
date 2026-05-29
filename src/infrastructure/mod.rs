@@ -11,10 +11,12 @@
 //!
 //! # Design Pattern
 //!
-//! The infrastructure layer follows the Repository pattern, isolating the
-//! domain logic from external storage implementations. This allows for:
+//! The infrastructure layer provides the adapters of a Ports & Adapters (hexagonal)
+//! architecture. Each adapter implements a port trait defined in
+//! [`crate::domain::ports`], isolating the domain logic from external storage
+//! implementations. This allows for:
 //!
-//! - Easy testing with mock implementations
+//! - Easy testing with mock implementations of the port traits
 //! - Flexibility to swap storage providers
 //! - Clear separation of concerns
 //!

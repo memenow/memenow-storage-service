@@ -6,6 +6,8 @@
 //!
 //! # Submodules
 //!
+//! - `ports`: Port traits (`ObjectStorage`, `ContentAddressedStorage`) that
+//!   infrastructure adapters implement
 //! - `services`: Service layer implementing business operations for file uploads
 //!
 //! # Architecture
